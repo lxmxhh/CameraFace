@@ -22,12 +22,13 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.hardware.Camera;
+import android.hardware.Camera.Face;
 import android.hardware.Camera.PictureCallback;
 
 
 public class CameraActivity extends Activity {
 	
-    private static Camera mCamera = null;
+    private static Camera mSingletonCamera = null;
     private Button mOpenButton = null;
     private Button mCloseButton = null;
     private Button mTakePictureButton = null;
@@ -77,8 +78,8 @@ public class CameraActivity extends Activity {
 	        @Override
 	        public void onClick(View v) {
 	            // get an image from the camera
-	        	if( mCamera != null)
-	        		mCamera.takePicture(null, null, mPicture);
+	        	if( getCameraInstance() != null)
+	        		getCameraInstance().takePicture(null, null, mPicture);
 	        }
 	    });
         
@@ -104,26 +105,38 @@ public class CameraActivity extends Activity {
     private void releaseCamera() {
     	resetCamera();
 
-    	if(mCamera != null) {
-    		mCamera.release();
-    		mCamera = null;
+    	if(mSingletonCamera != null) {
+    		mSingletonCamera.release();
+    		mSingletonCamera = null;
     	}
+    }
+    
+    class MyFaceDetectionListener implements Camera.FaceDetectionListener {
+
+        @Override
+        public void onFaceDetection(Face[] faces, Camera camera) {
+            if (faces.length > 0){
+                Log.d("FaceDetection", "face detected: "+ faces.length +
+                        " Face 1 Location X: " + faces[0].rect.centerX() +
+                        "Y: " + faces[0].rect.centerY() );
+            }
+        }
     }
     
     
     public static Camera getCameraInstance(){
-        if(mCamera == null) {
+        if(mSingletonCamera == null) {
 	        try {
-	        	mCamera = Camera.open(); // attempt to get a Camera instance
+	        	mSingletonCamera = Camera.open(); // attempt to get a Camera instance
 	        }
 	        catch (Exception e){
 	            // Camera is not available (in use or does not exist)
 	        	Log.e(TAG,e.getMessage());
 	        }
         }
-        return mCamera; // returns null if camera is unavailable
+        return mSingletonCamera; // returns null if camera is unavailable
     }
-    
+
     private void initCamera() {
     	if( bIsPreview ){
     		return;
@@ -132,6 +145,12 @@ public class CameraActivity extends Activity {
     	if (checkCameraHardware(CameraActivity.this)) {
 			Camera camera = getCameraInstance();
 			
+			// set Camera parameters
+            Camera.Parameters params = camera.getParameters();
+            params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+            camera.setParameters(params);
+            
+            camera.setFaceDetectionListener(new MyFaceDetectionListener());
 			//mCamera.setDisplayOrientation(-90);
 			if( camera != null && mCameraPreview != null ) {
 				mCameraPreview.setCamera(camera);
@@ -140,10 +159,25 @@ public class CameraActivity extends Activity {
 			}
     	}
     }
+
+    public void startFaceDetection(){
+        // Try starting Face Detection
+        Camera.Parameters params = getCameraInstance().getParameters();
+
+        // start face detection only *after* preview has started
+        Log.e(TAG,"start face pams..."+params.getMaxNumDetectedFaces());
+        if (params.getMaxNumDetectedFaces() > 0){
+            // camera supports face detection, so can start it:
+        	getCameraInstance().startFaceDetection();
+
+            Log.e(TAG,"start face detection...");
+        }
+    }
+    
     
     private void resetCamera() {
-    	if( mCamera != null && bIsPreview) {
-			mCamera.stopPreview();
+    	if( mSingletonCamera != null && bIsPreview) {
+			mSingletonCamera.stopPreview();
 			bIsPreview = false;
 			Log.e(TAG,"stop preview...");
 		}
@@ -196,6 +230,12 @@ public class CameraActivity extends Activity {
         	try {
         		mCamera.setPreviewDisplay(mHolder);
         		mCamera.startPreview();
+                
+        		//Log
+        		Log.e(TAG,"prepare to start Face Detection...");
+        		
+                startFaceDetection();
+        		
         	}catch (Exception e) {
         		Log.e(TAG, "Error setting camera preview: " + e.getMessage());
 			}
@@ -210,6 +250,8 @@ public class CameraActivity extends Activity {
             try {
                 mCamera.setPreviewDisplay(holder);
                 mCamera.startPreview();
+                Log.e(TAG,"surface_created.....");
+                startFaceDetection();
             } catch (IOException e) {
                 Log.d(TAG, "Error setting camera preview: " + e.getMessage());
             }
@@ -242,27 +284,13 @@ public class CameraActivity extends Activity {
 
             // set preview size and make any resize, rotate or
             // reformatting changes here
-            
-            // set Camera parameters
-            Camera.Parameters params = mCamera.getParameters();
-
-            if (params.getMaxNumMeteringAreas() > 0){ // check that metering areas are supported
-                List<Camera.Area> meteringAreas = new ArrayList<Camera.Area>();
-
-                Rect areaRect1 = new Rect(-100, -100, 100, 100);    // specify an area in center of image
-                meteringAreas.add(new Camera.Area(areaRect1, 600)); // set weight to 60%
-                Rect areaRect2 = new Rect(800, -1000, 1000, -800);  // specify an area in upper right of image
-                meteringAreas.add(new Camera.Area(areaRect2, 400)); // set weight to 40%
-                params.setMeteringAreas(meteringAreas);
-            }
-
-            mCamera.setParameters(params);
 
             // start preview with new settings
             try {
                 mCamera.setPreviewDisplay(mHolder);
                 mCamera.startPreview();
 
+                startFaceDetection();
             } catch (Exception e){
                 Log.d(TAG, "Error starting camera preview: " + e.getMessage());
             }
