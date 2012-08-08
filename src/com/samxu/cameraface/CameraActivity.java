@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import android.os.Bundle;
@@ -19,6 +20,7 @@ import android.widget.FrameLayout;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Rect;
 import android.hardware.Camera;
 import android.hardware.Camera.PictureCallback;
 
@@ -33,9 +35,8 @@ public class CameraActivity extends Activity {
     private static final String TAG = "myCameraTag";
     
     private boolean bIsPreview = false;
-	protected static final String MEDIA_TYPE_IMAGE = Environment.getExternalStorageDirectory().getPath() + "/camera_snap.jpg";;
-    
-    
+	protected static final String strCaptureFilePath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)+ "/camera_snap.jpg";
+
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -86,7 +87,7 @@ public class CameraActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        releaseCamera(mCamera);              // release the camera immediately on pause event
+        releaseCamera();              // release the camera immediately on pause event
     }
 
     /** Check if this device has a camera */
@@ -100,22 +101,12 @@ public class CameraActivity extends Activity {
         }
     }
     
-    private void releaseCamera(Camera camera) {
-    	if(camera != null) {
-    		
-    		try{
-    			camera.stopPreview();
-    			if(mCameraPreview != null) {
-    				mCameraPreview = null;
-    			}
-    		} catch (Exception e) {
-				// TODO: handle exception
-			}
-    		
-    		
-    		camera.release();
-    		camera = null;
-    		bIsPreview = false;
+    private void releaseCamera() {
+    	resetCamera();
+
+    	if(mCamera != null) {
+    		mCamera.release();
+    		mCamera = null;
     	}
     }
     
@@ -251,6 +242,21 @@ public class CameraActivity extends Activity {
 
             // set preview size and make any resize, rotate or
             // reformatting changes here
+            
+            // set Camera parameters
+            Camera.Parameters params = mCamera.getParameters();
+
+            if (params.getMaxNumMeteringAreas() > 0){ // check that metering areas are supported
+                List<Camera.Area> meteringAreas = new ArrayList<Camera.Area>();
+
+                Rect areaRect1 = new Rect(-100, -100, 100, 100);    // specify an area in center of image
+                meteringAreas.add(new Camera.Area(areaRect1, 600)); // set weight to 60%
+                Rect areaRect2 = new Rect(800, -1000, 1000, -800);  // specify an area in upper right of image
+                meteringAreas.add(new Camera.Area(areaRect2, 400)); // set weight to 40%
+                params.setMeteringAreas(meteringAreas);
+            }
+
+            mCamera.setParameters(params);
 
             // start preview with new settings
             try {
